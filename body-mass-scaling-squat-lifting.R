@@ -12,7 +12,7 @@ squat <- c(295,325,365.5,370,395,415,430)
 mydata <- data.frame(body = body, squat = squat)
 
 # scatter plot
-plot(mark ~ body, data = mydata,
+plot(squat ~ body, data = mydata,
      type = "p", 
      xlab = "Body Mass (kg)", 
      ylab = ("Squat Mass (kg)"), 
@@ -38,3 +38,18 @@ a <- round(exp(coef(mod.squat)[1]), 0)
 b <- round(coef(mod.squat)[2], 1)
 
 text(65, 420, labels = bquote(squat == .(a)  %*% body ^ .(b)  ), pos = 4)
+
+# ------------------------------------------------------------------------------
+# Analyse the specific athletes in https://www.youtube.com/watch?v=4VO7VMmSHCo
+# which started this whole thing off.
+
+athletes <- data.frame(name = c("Mostovenko","Faber","Schmidt","Forstemann","Beilmann"),
+                        body = c(89.6, 93, 114.6, 95.4, 81.2 ),
+                        bar = c(89.6, 93, 114.6, 95.4, 85))
+
+athletes$squat.max = exp(predict(mod.squat, newdata = atheletes,
+                             type = "response"))
+
+athletes$prop.max <- with(athletes, squat.max / bar)
+                        
+
