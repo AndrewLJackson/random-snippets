@@ -1,11 +1,12 @@
 ## ------------------------------------------------------------------------
 # from Andrew Jackson 15 Aug/16 to run MixSIAR in parallel
 # you could add force=TRUE to the options here if its not installing
-devtools::install_github("brianstock/MixSIAR@parallel-hotfix", 
-                         dependencies = TRUE, 
+devtools::install_github("brianstock/MixSIAR@parallel-hotfix",
+                         dependencies = TRUE,
                          build_vignettes = TRUE)
 
 library(MixSIAR)
+library(R2jags)
 
 mixsiar.dir <- find.package("MixSIAR")
 paste0(mixsiar.dir,"/example_scripts")
@@ -64,10 +65,14 @@ discr <- load_discr_data(filename=discr.filename, mix)
  process_err <- TRUE
  write_JAGS_model(model_filename, resid_err, process_err, mix, source)
 
+# Parameters of the run
+ mcmcPars <- list(chainLength=1000, burn=500, 
+                  thin=1, chains=2, calcDIC=TRUE)
+ 
 ## ---- eval=FALSE---------------------------------------------------------
 #  run <- list(chainLength=200000, burn=150000, thin=50, chains=3, calcDIC=TRUE)
 
 ## ---- eval=FALSE---------------------------------------------------------
- jags.1 <- run_model(run="test", mix, source, discr, model_filename,
+ jags.1 <- run_model(run = mcmcPars, mix, source, discr, model_filename,
                      alpha.prior = 1, resid_err, process_err)
 

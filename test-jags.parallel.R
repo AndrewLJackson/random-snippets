@@ -11,19 +11,19 @@ jags.inits <- function(){
 
 
 # works
-jagsfit.p <- jags.parallel(data=jags.data, inits=jags.inits, jags.params, 
+jagsfit.p <- R2jags::jags.parallel(data=jags.data, inits=jags.inits, jags.params, 
                            n.iter=5000, model.file=model.file)
 
 # fails
 n.iter=5000
-jagsfit.p <- jags.parallel(data=jags.data, inits=jags.inits, jags.params,
+jagsfit.p <- R2jags::jags.parallel(data=jags.data, inits=jags.inits, jags.params,
                            n.iter=n.iter, model.file=model.file)
 
 # works
 aa <-list()
 aa$n.iter <- 5000
 aa$n.chains <- 2
-jagsfit.p2 <- do.call(jags.parallel, 
+jagsfit.p2 <- do.call(R2jags::jags.parallel, 
                       list(data=jags.data, inits=jags.inits, jags.params,
                            n.iter=aa$n.iter, n.chains = aa$n.chains,
                            model.file=model.file))
