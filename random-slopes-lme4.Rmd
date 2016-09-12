@@ -1,0 +1,192 @@
+---
+title: "Random-slopes-lmer"
+author: "Andrew L Jackson"
+date: "9 September 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if(!require(viridis)) install.packages("viridis")
+library(viridis)
+```
+
+## Random Slopes Models in lme4
+Fitting of random slopes is possible in the frequentist pacakges lme4 and nlme but it has always confused me exactly how to parameterise the models. Normally I would fit these in JAGS and in this way I know exactly how the output mathces my expectations in an algebraic sense. Here I simulate some simple data and explore the various linear models including random intercept and random slopes that can be fit to the data.
+
+# Simulate some data
+First I simulate some data, in this case a set of 4 linear relationships of Y on X.
+
+```{r simluate}
+
+# set the random seed for reproducibility
+set.seed(1)
+
+# sample size per group
+n <- 20
+
+# number of groups
+g <- 5
+G <- factor(rep(LETTERS[1:g], n))
+
+# set the colour palette accordingly (NB i use the library viridis)
+palette(viridis(g))
+
+
+# a slope for each group taken from a normal distribution
+mu.b <- 2
+s.b <- 3
+b <- rnorm(g, mu.b, s.b)
+B <- rep(b, n) # and replicate them out for each sample
+
+# an intercept for each group, taken from a normal distribution
+mu.c <- 0
+s.c <- 2
+c <- rnorm(g, mu.c, s.c)
+C <- rep(c, n) # and replicate them out for each sample
+
+# The linear covariate X is uniform random between -2 and 2
+X <- runif(n*g, -2, 2)
+
+# define the residual noise
+s.r <- 1
+s <- rnorm(n*g, 0, s.r)
+
+# calculate the reponse variable Y
+Y <- X * B + C + s
+
+# Plot the results
+plot(Y ~ X, col = G)
+
+dd <- data.frame(Y = Y, X = X, G = G)
+dd.s <- split(dd, G)
+for (i in 1:length(dd.s)){
+  abline(lm(Y~X, data = dd.s[[i]]), col = i)
+}
+
+```
+
+# Model the Data
+Here we fit 5 models
+  - A glm with 4 slopes, 4 intercepts and a residual error
+  - A glmm with 1 slope, a mean intercept, a variance term for the intercept, and a residual error.
+  - A glmm with 4 slopes, a mean intercept, a variance term for the intercept, and a residual error.
+  - A glmm with 1 mean slope, a variance for the slopes, 1 mean intercept, a variance term for the intercepts, and a residual error term. In this model the random slopes and intercepts are assumed to co-vary.
+  - A glmm with 1 mean slope, a variance for the slopes, 1 mean intercept, a variance term for the intercepts, and a residual error term. In this model the random slopes and intercepts are assumed to be independent, which is set using the double bar `||` syntax.
+
+```{r model}
+
+# load the lme4 library
+if(!require(lme4, quietly = TRUE)) install.packages("lme4")
+library(lme4, quietly = TRUE)
+
+
+# fixed effects only. 4 slopes and 4 intercepts using glm()
+m1 <- glm(Y ~ X * G)
+
+# one slope and random intercept
+m2 <- lmer(Y ~ X + (1|G))
+
+# 4 slopes and a random intercept term
+m3 <- lmer(Y ~ X + X:G + (1|G))
+
+# random slope and random intercept
+m4 <- lmer(Y ~ X + (X|G))
+
+# random slope and random intercept (uncorrelated)
+m5 <- lmer(Y ~ X + (X||G))
+```
+
+We now want to compare these outputs to the simluted values which we know to to be "true".
+
+```{r population.values}
+# collate the specified values from the start
+true.coefs <- data.frame(Intercept = c, Slopes.X = b)
+
+print(round(true.coefs,2))
+
+# It is also useful to compare these coefficients to those for Group A,
+# since model fitting often compares the effect of the other Groups to this
+# baseline, reference group.
+
+relative.coefs <- data.frame(G.effects = c - c[1], Slopes.effects = b - b[1])
+
+print(round(relative.coefs, 2))
+
+# the sample means of these coefficients
+print(round(colMeans(true.coefs),2))
+
+# and the population means and variances (which we specified a priori)
+cat("Population mean\n")
+cat(c(mu.c, mu.b))
+
+cat("Population variances\n")
+cat(c(s.c, s.b) ^ 2)
+```
+
+Now we can compare our fitted models to these coefficients
+```{r compare}
+
+# pull out and re-organise the estimates for the glm
+tmp <- coef(m1)
+glm.est <- data.frame(Intercepts = c(tmp[1], tmp[3:(g+1)]),
+                 Slopes = c(tmp[2], tmp[(g+2):(g+g)]))
+rownames(glm.est) <- LETTERS[1:g]
+
+print(glm.est)
+
+# ------------------------------------------------------------
+# get estimates for the lmer objects which is much easier
+
+rand.intercepts.1.slope <- coef(m2)$G
+print(rand.intercepts.1.slope)
+
+tmp <- coef(m3)$G
+rand.inter.4.slopes <- data.frame(Intercept = tmp$`(Intercept)`,
+                                  X = unlist(c(tmp[1,2], tmp[1,3:(g+1)] +
+                                                 tmp[1,2])))
+rownames(rand.inter.4.slopes) <- LETTERS[1:g]
+print(rand.inter.4.slopes)
+
+# Random slopes and intercepts
+rand.slopes <- coef(m4)$G
+print(rand.slopes)
+
+# Random slopes and intercepts
+rand.slopes.u <- coef(m5)$G
+print(rand.slopes.u)
+```
+So, in all cases, we do pretty well at re-capturing the specified coefficients.
+
+# What about the variance terms?
+Focussing on the fully random slopes model, we do a pretty good job and estimating the variances associated with our coefficients. We can find these estimates in the summary table of the model output, under the heading "Random effects:". They are pretty close to those we specified when simulating the data.
+
+```{r variances}
+# summary of the full random slopes and random intercept model
+summary(m4)
+
+# summary of the full uncorrelated random slopes and random intercept model
+summary(m5)
+
+# we simulated using standard deviations, so need to square them to get 
+# variances.
+sim.vars <- c(Var.intercepts = s.c ^ 2, 
+              Var.slopes = s.b ^ 2,
+              Resid.Var = s.r ^ 2)
+
+```
+
+# Model selection
+Finally we might like to use AIC to select among our models, however I think that calculation of AIC is not appropriate for among models whose random parts are different and instead we should use likelihood only. But i dont know, and somewhat annoyingly, the best model is m1 which is the full factorial fixed effects model.
+
+```{r aic}
+lapply(list(m1, m2, m3, m4, m5), extractAIC)
+```
+
+Likelihood for each model
+```{r loglik}
+lapply(list(m1, m2, m3, m4, m5), logLik)
+```
+
+
+
