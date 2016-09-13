@@ -2,7 +2,7 @@
 # Example from The R Book by Michael Crawley
 rm(list=ls())
 
-data("Pastes")
+
 
 # load the glmm package
 library(lme4)
@@ -12,6 +12,7 @@ library(rjags)
 
 library(viridis)
 
+data("Pastes")
 # ------------------------------------------------------------
 
 
