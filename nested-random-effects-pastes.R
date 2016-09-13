@@ -24,19 +24,23 @@ library(viridis)
 
 # the various means for each group at each level
 overall.mean <- mean(Pastes$strength)
-level.1.mu <- tapply(Pastes$strength, Pastes$sample, mean)
+level.0.mu <- tapply(Pastes$strength, Pastes$sample, mean)
+level.1.mu <- tapply(Pastes$strength, Pastes$cask, mean)
 level.2.mu <- tapply(Pastes$strength, Pastes$batch, mean)
 
 # the variances of those means (and the overall variance)
 overall.var <- var(Pastes$strength)
+level.0.var <- var(level.0.mu)
 level.1.var <- var(level.1.mu)
 level.2.var <- var(level.2.mu)
 
 # collate the variances among means at each level
 # i.e. these are the naive summary random effects.
-level.variances <- c(L1 = level.1.var,
+level.variances <- c(L0 = level.0.var,
+                     L1 = level.1.var,
                      L2 = level.2.var,
                      Overall = overall.var)
+
 
 # for sake of summary, assume independence of variances, and sum them
 # which *should* be close enough to the overall variance unless there 
