@@ -1,0 +1,54 @@
+---
+title: "Nested Random Effects in lme4"
+author: "Andrew L Jackson"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This example illustrates how the syntax for nesting random effects in `lme4::lmer` works. Essentially its a factor labelling behaviour.
+
+```{r load pacakge}
+
+# load the glmm package
+library(lme4)
+
+```
+
+The point about data encoding in this example is that observations are nested within casks, which are nested within batches. However, the casks have been labelled as "a", "b" , "c" in each batch, even though there is no relationship between a cask labelled "a" in batch A with one labelled "a" in batch B. Hence the need to include the nesting structure via the "batch/cask" notation which is the same as including a batch:cask interaction, which is the same as labelling the casks uniquely as is done in the column "sample".
+
+```{r data}
+data("Pastes")
+
+# view the data
+
+head(Pastes,10)
+
+```
+
+## Fit the random effects models
+
+```{r fit}
+# nested random effects as per the / notation
+m1 <- lmer(strength ~ 1 + (1|batch/cask), data = Pastes)
+
+# the same by manually specifying the interation term
+m2 <- lmer(strength ~ 1 + (1|batch) + (1|batch:cask), data = Pastes)
+
+# the same if one had encoded the data correctly in the first place...
+m3 <- lmer(strength ~ 1 + (1|batch) + (1|sample), data = Pastes)
+```
+
+All three of these models are identical:
+
+```{r output}
+summary(m1)
+summary(m2)
+summary(m3)
+
+```
+
+

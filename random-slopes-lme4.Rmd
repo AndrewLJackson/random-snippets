@@ -1,5 +1,5 @@
 ---
-title: "Random-slopes-lmer"
+title: "Random slopes models in lmer"
 author: "Andrew L Jackson"
 date: "9 September 2016"
 output: html_document

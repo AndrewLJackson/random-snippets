@@ -106,7 +106,7 @@ m.marginal <- lmer(strength ~ 1 + (1|batch) + (1|cask),
 # ------------------------------------------------------------
 
 
-# Define the jags model as a string
+# Define the jags model as a string.
 
 model_string = '
   model {
@@ -165,62 +165,49 @@ model_string = '
 
 mydata <- list()
 mydata$y <- Pastes$strength
-mydata$level1 <- as.numeric(Pastes$cask)
+
+# level1 data is sample (or batch:cask which is same thing)
+mydata$level1 <- as.numeric(Pastes$sample)
+
+# level2 data is batch
 mydata$level2 <- as.numeric(Pastes$batch)
 
+# number of observations at each level
 mydata$n_level1 <- max(mydata$level1)
 mydata$n_level2 <- max(mydata$level2)
 mydata$n <- length(Pastes$strength)
 
-model = jags.model(textConnection(model_string), 
+
+# define the model
+model <- jags.model(textConnection(model_string), 
                           data = mydata, 
                           n.chain = 2, 
                           n.adapt = 10000)
 
-bayes.marginal = coda.samples(model = model, 
-                             variable.names = c("b0",
-                                                "v_resid",
-                                                "v_level1",
-                                                "v_level2"), 
-                             n.iter = 5 * 10^4, 
-                             thin = 10)
-
-gelman.diag(bayes.marginal)
-
-# ------------------------------------------------------------
-# now recode the factor designation for irrigation and density
-# so that they are independent groups, nested within the 
-# multi-level structure
-
-# cask interacts with block to produce "sample"
-mydata$level1 <- as.numeric(Pastes$sample)
-mydata$n_level1 <- max(mydata$level1)
-
-# assign the new data to the jags model object
-model = jags.model(textConnection(model_string), 
-                   data = mydata, 
-                   n.chain = 2, 
-                   n.adapt = 10000)
-
-# run the nested structure version
-bayes.nested = coda.samples(model = model, 
-                              variable.names = c("b0",
-                                                 "v_resid",
-                                                 "v_level1",
-                                                 "v_level2"), 
-                              n.iter = 5 * 10^4, 
-                              thin = 10)
+# generate samples from the model
+bayes.nested <- coda.samples(model = model, 
+                            variable.names = c("b0",
+                                               "v_resid",
+                                               "v_level1",
+                                               "v_level2"), 
+                            n.iter = 5 * 10^4, 
+                            thin = 20)
 
 
+# test for convergence. NB if I monitor v_tot in the model, then
+# i get an error sometimes, i think due to collinearity in the 
+# posteriors, which is inherent.
 gelman.diag(bayes.nested)
 
+# density plots of the posteriors
+densplot(bayes.nested)
 
 # ------------------------------------------------------------
 
 # Compare the various models
+#summary(m.marginal)
+
 summary(m.nested)
-summary(m.marginal)
-summary(bayes.marginal)
 summary(bayes.nested)
 
 level.variances
@@ -230,8 +217,10 @@ hdrcde::hdr(as.matrix(bayes.nested))
 
 nested.mat <- as.matrix(bayes.nested)
 
+# calculate the posterior modes
 nested.modes <- apply(nested.mat, 2, 
                       function(x){hdrcde::hdr(x)$mode})
+
 
 
 
