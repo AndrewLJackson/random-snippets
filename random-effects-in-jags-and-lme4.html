@@ -253,18 +253,18 @@ gelman.diag(bayes.nested)</code></pre>
 <pre><code>## Potential scale reduction factors:
 ## 
 ##          Point est. Upper C.I.
-## b0             1.01       1.02
-## v_level0       1.00       1.00
-## v_level1       1.00       1.00
-## v_level2       1.01       1.02
+## b0                1       1.00
+## v_level0          1       1.00
+## v_level1          1       1.00
+## v_level2          1       1.01
 ## 
 ## Multivariate psrf
 ## 
-## 1.01</code></pre>
+## 1</code></pre>
 </div>
 <div id="compare-model-outputs" class="section level2">
 <h2>Compare model outputs</h2>
-<p>It only remains to compare the results from the ML and Bayesian model fits. This can be done by inspecting the <code>summary()</code> output of each, although the additional information on the various quantiles produced for the bayesian model is a little unhelpful for a quick comparison. I create some basic vectors of the most pertinent information (central tendency) as well. In this case, <code>b_0</code> corresponds to the intercept, <code>v_level0</code> to the residual variance, <code>v_level1</code>$ to the variance associated with cask:batch, and <code>v_level2</code> to the variance associated with batch in the ML model <code>m.nested</code>.</p>
+<p>It only remains to compare the results from the ML and Bayesian model fits. This can be done by inspecting the <code>summary()</code> output of each, although the additional information on the various quantiles produced for the bayesian model is a little unhelpful for a quick comparison. I create some basic vectors of the most pertinent information (central tendency) as well. In this case, <code>b_0</code> corresponds to the intercept, <code>v_level0</code> to the residual variance, <code>v_level1</code>$ to the variance associated with cask:batch, and <code>v_level2</code> to the variance associated with batch in the ML model <code>m.nested</code>. With the posterior distribution of <code>v_level2</code>, the batch level variance, being pushed up against 0 and being heavily skewed, the mode, mean and median are all very different. In many ways, this might suggest that this random effect is not required since it is practically zero, but in any case, the median provides a more consistent estimate with the ML approach using <code>lmer</code>.</p>
 <pre class="r"><code>summary(m.nested)</code></pre>
 <pre><code>## Linear mixed model fit by REML ['lmerMod']
 ## Formula: strength ~ 1 + (1 | batch/cask)
@@ -297,18 +297,18 @@ gelman.diag(bayes.nested)</code></pre>
 ##    plus standard error of the mean:
 ## 
 ##             Mean     SD Naive SE Time-series SE
-## b0       60.0396 0.7983 0.007983       0.024517
-## v_level0  0.7571 0.2125 0.002125       0.002149
-## v_level1  9.7838 3.3194 0.033194       0.047574
-## v_level2  3.0478 4.1016 0.041016       0.115903
+## b0       59.9894 0.8090 0.008090       0.024884
+## v_level0  0.7542 0.2152 0.002152       0.002205
+## v_level1  9.8105 3.3107 0.033107       0.044117
+## v_level2  2.9597 4.2290 0.042290       0.117375
 ## 
 ## 2. Quantiles for each variable:
 ## 
-##               2.5%     25%     50%     75%  97.5%
-## b0       58.399575 59.5376 60.0452 60.5536 61.608
-## v_level0  0.448218  0.6062  0.7242  0.8655  1.261
-## v_level1  5.058684  7.4480  9.1900 11.4375 17.896
-## v_level2  0.008062  0.5741  1.8157  4.0283 13.417</code></pre>
+##               2.5%     25%    50%     75%  97.5%
+## b0       58.291914 59.4904 59.995 60.4988 61.576
+## v_level0  0.445571  0.6020  0.716  0.8649  1.276
+## v_level1  5.170482  7.4858  9.233 11.4548 17.927
+## v_level2  0.007623  0.4755  1.696  3.7955 13.877</code></pre>
 <pre class="r"><code># convert the MCMC output to a matrix
 bayes.mat &lt;- as.matrix(bayes.nested)
 
@@ -325,9 +325,16 @@ bayes.mean &lt;- apply(bayes.mat, 2, mean)
 # collate and round them for printing to screen
 print(round(rbind(bayes.modes, bayes.median, bayes.mean),2))</code></pre>
 <pre><code>##                 b0 v_level0 v_level1 v_level2
-## bayes.modes  60.04     0.68     8.25     0.09
-## bayes.median 60.05     0.72     9.19     1.82
-## bayes.mean   60.04     0.76     9.78     3.05</code></pre>
+## bayes.modes  60.03     0.66     8.10     0.08
+## bayes.median 60.00     0.72     9.23     1.70
+## bayes.mean   59.99     0.75     9.81     2.96</code></pre>
+<pre class="r"><code># print just the variances for the lmer fit
+vc &lt;- VarCorr(m.nested)
+print(vc,comp=c(&quot;Variance&quot;), digits = 2)</code></pre>
+<pre><code>##  Groups     Name        Variance
+##  cask:batch (Intercept) 8.43    
+##  batch      (Intercept) 1.66    
+##  Residual               0.68</code></pre>
 </div>
 
 

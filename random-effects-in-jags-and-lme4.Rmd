@@ -148,7 +148,7 @@ gelman.diag(bayes.nested)
 ```
 
 ## Compare model outputs
-It only remains to compare the results from the ML and Bayesian model fits. This can be done by inspecting the `summary()` output of each, although the additional information on the various quantiles produced for the bayesian model is a little unhelpful for a quick comparison. I create some basic vectors of the most pertinent information (central tendency) as well. In this case, `b_0` corresponds to the intercept, `v_level0` to the residual variance, `v_level1`$ to the variance associated with cask:batch, and `v_level2` to the variance associated with batch in the ML model `m.nested`.
+It only remains to compare the results from the ML and Bayesian model fits. This can be done by inspecting the `summary()` output of each, although the additional information on the various quantiles produced for the bayesian model is a little unhelpful for a quick comparison. I create some basic vectors of the most pertinent information (central tendency) as well. In this case, `b_0` corresponds to the intercept, `v_level0` to the residual variance, `v_level1`$ to the variance associated with cask:batch, and `v_level2` to the variance associated with batch in the ML model `m.nested`. With the posterior distribution of `v_level2`, the batch level variance, being pushed up against 0 and being heavily skewed, the mode, mean and median are all very different. In many ways, this might suggest that this random effect is not required since it is practically zero, but in any case, the median provides a more consistent estimate with the ML approach using `lmer`.
 
 ```{r compare}
 summary(m.nested)
@@ -169,6 +169,10 @@ bayes.mean <- apply(bayes.mat, 2, mean)
 
 # collate and round them for printing to screen
 print(round(rbind(bayes.modes, bayes.median, bayes.mean),2))
+
+# print just the variances for the lmer fit
+vc <- VarCorr(m.nested)
+print(vc, comp = c("Variance"), digits = 2)
 
 ```
 
