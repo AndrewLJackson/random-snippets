@@ -1,0 +1,177 @@
+---
+title: "Random Effects in Jags and lme4"
+author: "Andrew L Jackson"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this example, we are going to fit (nested) random effects models using both Maximmum Likelihood methods using the package `lme4` and Bayesian methods using the package `rjags`. The data we will use is the `Pastes` data included with `lme4` which is the "Strength of a chemical paste product; its quality depending on the delivery batch, and the cask within the delivery" (see `?lme4::Pastes` for more details).  These random effects models are often synonymously called "mixed effects" or "multi-level" models.
+
+
+```{r libraries}
+# clear the current environment of objects
+rm(list=ls())
+
+# load the glmm package
+library(lme4, quietly = TRUE)
+
+# load the rjags package
+# NB you must also install the JAGS software which is currently available
+# from http://mcmc-jags.sourceforge.net. You cant install this from Rstudio # or R directly.
+library(rjags, quietly = TRUE)
+
+# This code requires the hdrcde package which you may need to install.
+library(hdrcde, quietly = TRUE)
+
+# I always load the viridis package to create colour palettes,
+# but you could skip this and use a different palette if you like.
+library(viridis, quietly = TRUE)
+
+# load the data
+data("Pastes")
+```
+
+
+## Fit the random effects model using Maximum Likelihood
+See the associated file *nesting-in-lmer.html* for further details on the syntax and reasoning behind nested random effects.
+
+```{r ML}
+# nested random effects
+m.nested <- lmer(strength ~ 1 + (1|batch/cask), data = Pastes)
+```
+
+## Fit the random effects model using Bayesian Inference
+This is a much more complicated situation as we are going to use the JAGS software via the R package `rjags` to specify and fit a custom model.
+
+First of all we have to define our model in the jags language. This is defined as a character string within our script, but it could also (of more often) be held in its own `*.txt` file in a suitable directory (e.g. the working directory of your script). The random effects $U$ and $V$ are defined as random deviations from the overall mean $b0$ and are placed on the fixed part of the model equation (i.e. the mean). It is possible to rewrite this likelihood so that all the variance terms appear on the error side of the equation, but I prefer this way and it is all the same in the end. Note also that jags uses *precision* which is *1/variance*, though we actually define our priors on the corresponding *standard deviations*. I use a more generic coding and refer to `level1` and `level2` in the code below which correspond with `sample` and `batch` respectively. These are converted to integer codings which are then used to look up the correct random deviation in the vector.
+
+```{r jags_model}
+model_string = '
+  model {
+
+  # Likelihood
+    for (i in 1:n){
+      y[i] ~ dnorm(mu[i], tau_level0)
+      mu[i] <- b0 + U[level1[i]] + V[level2[i]]
+    }
+  
+  # Random effect of level1 (cask:batch, i.e. sample)
+  # Loop through the 30 samples in this example to create
+  # a vector of random deviations.
+  for (j in 1:n_level1){
+    U[j] ~ dnorm(0, tau_level1)
+  }
+  
+  # Random effect of level2 (batch)
+  # Loop through the 10 batches in this example to create
+  # a vector of random deviations.
+  for (k in 1:n_level2){
+    V[k] ~ dnorm(0, tau_level2)
+  }
+  
+  # ------------------------------------------------------------
+  # priors on fixed parts
+  
+  # the intercept (overall mean in this case)
+  b0 ~ dnorm(0, 10^-6)
+  
+  # ------------------------------------------------------------
+  # priors on random parts (deviances from the overall mean)
+  # these are specified on the standard deviations, and then
+  # variance and precision are calculated for each for the 
+  # likelihood above.
+  
+  # level 0 (the residual error)
+  sigma ~ dunif(0,10)
+  v_level0 <- sigma * sigma
+  tau_level0 <- 1 / v_level0
+
+  # level 1
+  sigma_level1 ~ dunif(0,10)
+  v_level1 <- sigma_level1 * sigma_level1
+  tau_level1 <- 1 / v_level1 
+  
+  # level 2
+  sigma_level2 ~ dunif(0,10)
+  v_level2 <- sigma_level2 * sigma_level2
+  tau_level2 <- 1 / v_level2
+  
+  } # end of model
+'
+```
+
+The data now need to be collected in a list, with element names corresponding to the jags code above.
+
+```{r jags_data}
+mydata <- list()
+
+# the response variable y
+mydata$y <- Pastes$strength
+
+# level 1 factor encoded as integers
+mydata$level1 <- as.numeric(Pastes$sample)
+
+# level 2 factor encoded as integers
+mydata$level2 <- as.numeric(Pastes$batch)
+
+# number of observations for each group which is used to 
+# create the level-specific random effect.
+mydata$n_level1 <- max(mydata$level1)
+mydata$n_level2 <- max(mydata$level2)
+mydata$n <- length(Pastes$strength)
+```
+
+We now create a jags model object containing the data and the model along with some details about how many chains will be run to simulate from the posterior distribution, and how many iterations will be used for the model to learn (adapt) how best to sample from the MCMC process (which we dont really have to worry too much about if our models are converging at the end of this process). We then use `coda.samples` to generate our posterior estimates. We define which variables we want to monitor (generate estimates for) and also determine the length of the simluation run for each chain, and how often we want to sample from the chain (I have selected `thin = 10` to avoid autocorrelation in the samples). We also run a quick test on the convergence of the simulation (though I am not going to dwell too much on this aspect here and will do so in a dedicated file another time).
+
+```{r jags_sample}
+# assign the data to the jags model object
+model = jags.model(textConnection(model_string), 
+                   data = mydata, 
+                   n.chain = 2, 
+                   n.adapt = 10000)
+
+# fit the model
+bayes.nested = coda.samples(model = model, 
+                              variable.names = c("b0",
+                                                 "v_level0",
+                                                 "v_level1",
+                                                 "v_level2"), 
+                              n.iter = 5 * 10^4, 
+                              thin = 10)
+
+# these numbers should all be close to 1 (which they are... very close)
+gelman.diag(bayes.nested)
+```
+
+## Compare model outputs
+It only remains to compare the results from the ML and Bayesian model fits. This can be done by inspecting the `summary()` output of each, although the additional information on the various quantiles produced for the bayesian model is a little unhelpful for a quick comparison. I create some basic vectors of the most pertinent information (central tendency) as well. In this case, `b_0` corresponds to the intercept, `v_level0` to the residual variance, `v_level1`$ to the variance associated with cask:batch, and `v_level2` to the variance associated with batch in the ML model `m.nested`.
+
+```{r compare}
+summary(m.nested)
+summary(bayes.nested)
+
+# convert the MCMC output to a matrix
+bayes.mat <- as.matrix(bayes.nested)
+
+# get the modes of each posterior parameter via hdrcd::hdr
+bayes.modes <- apply(bayes.mat, 2, 
+                      function(x){hdrcde::hdr(x)$mode})
+
+# medians
+bayes.median <- apply(bayes.mat, 2, stats::median)
+
+# means
+bayes.mean <- apply(bayes.mat, 2, mean)
+
+# collate and round them for printing to screen
+print(round(rbind(bayes.modes, bayes.median, bayes.mean),2))
+
+```
+
+
+
+
