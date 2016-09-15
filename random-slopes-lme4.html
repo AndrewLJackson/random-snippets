@@ -355,7 +355,8 @@ sim.vars &lt;- c(Var.intercepts = s.c ^ 2,
 <div id="model-selection" class="section level1">
 <h1>Model selection</h1>
 <p>Finally we might like to use AIC to select among our models, however I think that calculation of AIC is not appropriate for among models whose random parts are different and instead we should use likelihood only. But i dont know, and somewhat annoyingly, the best model is m1 which is the full factorial fixed effects model.</p>
-<pre class="r"><code>lapply(list(m1, m2, m3, m4, m5), extractAIC)</code></pre>
+<p><strong><em>UPDATE:</em></strong> After some research (googling) it turns out that comparisons between lmer and glm (or lm) fitted models using AIC is not possible owing to the different way in which likelihood is computed. <strong><em>Do not</em></strong> is the <a href="http://glmm.wikidot.com/faq">simple advice</a>. There are also <a href="http://www.ssicentral.com/hlm/help6/faq/Full_ML_vs_Restricted_ML.pdf">cautionary instrucitons</a> when comparing <code>lmer</code> models whose fixed effects differ, with the advice being to set <code>REML = FALSE</code>.</p>
+<pre class="r"><code>lapply(list(m1, m2, m3, m4, m5), extractAIC, REML = T)</code></pre>
 <pre><code>## [[1]]
 ## [1]  10.0000 285.4967
 ## 
