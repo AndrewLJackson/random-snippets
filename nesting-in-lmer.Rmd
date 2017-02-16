@@ -25,7 +25,7 @@ data("Pastes")
 
 # view the data
 
-head(Pastes,10)
+Pastes
 
 ```
 

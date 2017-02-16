@@ -9,8 +9,13 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-In this example, we are going to fit (nested) random effects models using both Maximmum Likelihood methods using the package `lme4` and Bayesian methods using the package `rjags`. The data we will use is the `Pastes` data included with `lme4` which is the "Strength of a chemical paste product; its quality depending on the delivery batch, and the cask within the delivery" (see `?lme4::Pastes` for more details).  These random effects models are often synonymously called "mixed effects" or "multi-level" models.
+In this example, we are going to fit (nested) random effects models using both Maximmum Likelihood methods using the package `lme4` and Bayesian methods using the package `rjags`. The data we will use is the `Pastes` data included with `lme4` which is the "Strength of a chemical paste product; its quality depending on the delivery batch, and the cask within the delivery" (see `?lme4::Pastes` for more details).  These random effects models are often synonymously called "mixed effects" or "multi-level" models. 
 
+Mathematically they take the form
+
+$$y_{ijk} = \beta_0 + U_{ij} + V_{ijk} + \epsilon_{i}$$
+
+where $\beta_0$ is the intercept, or overall grand mean in this case; $U_{ij}$ is the random deviation from the intercept for the *i*th individual in the *j*th level 1 grouping; $V_{ijk}$ is the random deviation from the intercept for the *k*th level 2 grouping (which is added to the *i*th individual within the *j*th group); and $\epsilon_i$ is the residual error or level 0 error deviation. All of $U$, $V$ and $\epsilon$ are assumed to come from a normal distribution with mean 0 and a variance to be estimated from the data.
 
 ```{r libraries}
 # clear the current environment of objects
@@ -26,6 +31,9 @@ library(rjags, quietly = TRUE)
 
 # This code requires the hdrcde package which you may need to install.
 library(hdrcde, quietly = TRUE)
+
+# this code requires the MCMCglmm package
+library(MCMCglmm, quietly = TRUE)
 
 # I always load the viridis package to create colour palettes,
 # but you could skip this and use a different palette if you like.
@@ -104,7 +112,7 @@ model_string = '
 '
 ```
 
-The data now need to be collected in a list, with element names corresponding to the jags code above.
+The data now need to be collected in a list, with element names corresponding to the jags code above. To fit with the generic labelling used in the jags model above, we relabel the data in `Pastes` when we create the list object `mydata`.
 
 ```{r jags_data}
 mydata <- list()
@@ -140,21 +148,44 @@ bayes.nested = coda.samples(model = model,
                                                  "v_level0",
                                                  "v_level1",
                                                  "v_level2"), 
-                              n.iter = 5 * 10^4, 
+                              n.iter = 3 * 10^4, 
                               thin = 10)
 
 # these numbers should all be close to 1 (which they are... very close)
 gelman.diag(bayes.nested)
 ```
 
+## MCMCglmm
+The `MCMCglmm` package provides a similar interface to `lme4` but fitting is in the Bayesian framework using mcmc and has the additional advantage of being able to handle phylogenetic correlation (which we won't cover here). Here we run the mcmc sampler with the same iterations, burnin and thinning as we did in the jags model. We use a non-informative prior as recommended in the \href{guidelines.https://cran.r-project.org/web/packages/MCMCglmm/vignettes/CourseNotes.pdf}{MCMCglmm guidelines}. Note that the priors for the random effects terms in `MCMCglmm` are the [inverse-Wishart distribution](https://en.wikipedia.org/wiki/Inverse-Wishart_distribution), which as these are univariates, simplifies to the [inverse-gamma distribution](https://en.wikipedia.org/wiki/Inverse-gamma_distribution), but take care in the parameterisation if comparing with the `jags` priors above (I haven't done the maths to check, but just leave this hanging here as a cautionary note and as an explanation for why the estimates are slightly different between the two models). 
+
+```{r mcmcglmm}
+
+
+prior <- list(G = list(G1 = list(V = 1/4, nu=0.002),
+                       G2 = list(V = 1/4, nu=0.002)))
+
+# verbose = FALSE prevents updating information to be printed to screen 
+# for this vignette.               
+glmm.nested <- MCMCglmm(strength ~ 1, random = ~ batch + sample, 
+                        data = Pastes,
+                        nitt = 3 * 10^4,
+                        thin = 10,
+                        burnin = 10000,
+                        prior = prior,
+                        verbose = FALSE)
+
+
+```
+
 ## Compare model outputs
-It only remains to compare the results from the ML and Bayesian model fits. This can be done by inspecting the `summary()` output of each, although the additional information on the various quantiles produced for the bayesian model is a little unhelpful for a quick comparison. I create some basic vectors of the most pertinent information (central tendency) as well. In this case, `b_0` corresponds to the intercept, `v_level0` to the residual variance, `v_level1`$ to the variance associated with cask:batch, and `v_level2` to the variance associated with batch in the ML model `m.nested`. With the posterior distribution of `v_level2`, the batch level variance, being pushed up against 0 and being heavily skewed, the mode, mean and median are all very different. In many ways, this might suggest that this random effect is not required since it is practically zero, but in any case, the median provides a more consistent estimate with the ML approach using `lmer`.
+It only remains to compare the results from the ML and Bayesian model fits. Here I focus on the Bayesian fit via jags, but we could also spend some time looking at the `MCMCglmm` fit in the same manner. Comparison can be done by inspecting the `summary()` output of each, although the additional information on the various quantiles produced for the bayesian model is a little unhelpful for a quick comparison. I create some basic vectors of the most pertinent information (central tendency) as well. In this case, `b_0` corresponds to the intercept, `v_level0` to the residual variance, `v_level1` to the variance associated with cask:batch, and `v_level2` to the variance associated with batch in the ML model `m.nested`. With the posterior distribution of `v_level2`, the batch level variance, being pushed up against 0 and being heavily skewed, the mode, mean and median are all very different. In many ways, this might suggest that this random effect is not required since it is practically zero, but in any case, the median provides a more consistent estimate with the ML approach using `lmer`.
 
 ```{r compare}
 summary(m.nested)
 summary(bayes.nested)
+summary(glmm.nested)
 
-# convert the MCMC output to a matrix
+# convert the jags created MCMC output to a matrix
 bayes.mat <- as.matrix(bayes.nested)
 
 # get the modes of each posterior parameter via hdrcd::hdr

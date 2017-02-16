@@ -1,0 +1,178 @@
+---
+title: "Basic GLM fitting via JAGS and R"
+author: "Andrew L Jackson"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this example we will fit a basic general linear model with gaussian errors by way of example of how to use rjags to it custom Bayesian models. The data we will use will be simluated
+
+```{r libraries}
+# clear the current environment of objects
+rm(list=ls())
+
+# load the rjags package
+# NB you must also install the JAGS software which is currently available
+# from http://mcmc-jags.sourceforge.net. You cant install this from Rstudio # or R directly.
+library(rjags, quietly = TRUE)
+
+# This code requires the hdrcde package which you may need to install.
+library(hdrcde, quietly = TRUE)
+
+# this code requires the MCMCglmm package
+#library(MCMCglmm, quietly = TRUE)
+
+# I always load the viridis package to create colour palettes,
+# but you could skip this and use a different palette if you like.
+library(viridis, quietly = TRUE)
+
+# create a colour palette of 3 colours for this example
+palette(viridis(3))
+
+
+
+# Create some random data
+# number of observations per group
+n <- 20 
+
+# create two groups as a categorical factor
+G <- as.factor(rep(c("A","B"), n))
+
+# intercepts for our two groups
+b.G <- c(5, 20)
+
+# create a linear covariate for each observation
+X <- runif(n*2, 0, 100)
+
+# create two slopes for each group
+b.X <- rep(c(0.1, 0.2), n)
+
+# define some random noise for our data
+ee <- rnorm(n*2, 0, 2.5)
+
+# simulate our response variable y
+Y <- b.G[G] + (b.X * X) + ee
+
+# plot the data
+plot(Y ~ X, col = G, bty = "L")
+
+
+```
+
+## Fit the random effects model using Bayesian Inference
+This is a much more complicated situation as we are going to use the JAGS software via the R package `rjags` to specify and fit a custom model.
+
+First of all we have to define our model in the jags language. This is defined as a character string within our script, but it could also (of more often) be held in its own `*.txt` file in a suitable directory (e.g. the working directory of your script). Note also that jags uses *precision* which is *1/variance*, though we actually define our priors on the corresponding *standard deviations*.
+
+```{r jags_model}
+model_string = '
+  model {
+
+  # Likelihood
+    for (i in 1:n){
+      Y[i] ~ dnorm(mu[i], tau)
+      mu[i] <- b0[G[i]] + b1[G[i]] * X[i]
+      
+      # track the residuals
+      resid[i] <- Y[i] - mu[i]
+    }
+  
+  
+  # ------------------------------------------------------------
+  # priors on fixed parts
+  
+  # the intercepts for each group
+  b0[1] ~ dnorm(0, 10^-6)
+  b0[2] ~ dnorm(0, 10^-6)
+
+  b1[1] ~ dnorm(0, 10^-6)
+  b1[2] ~ dnorm(0, 10^-6)
+
+  # ------------------------------------------------------------
+  # priors on random parts (deviances from the overall mean)
+  # these are specified on the standard deviations, and then
+  # variance and precision are calculated for each for the 
+  # likelihood above.
+  
+  # level 0 (the residual error)
+  sigma ~ dunif(0,10)
+  v <- sigma * sigma
+  tau <- 1 / v
+
+  } # end of model
+'
+```
+
+The data now need to be collected in a list, with element names corresponding to the jags code above. To fit with the generic labelling used in the jags model above, we relabel the data in `Pastes` when we create the list object `mydata`.
+
+```{r jags_data}
+mydata <- list()
+
+# the response variable y
+mydata$Y <- Y
+
+# the covariate X
+mydata$X <- X
+
+# the grouping covariate, converted into an integer factor
+mydata$G <- as.numeric(G)
+
+# number of total observations 
+mydata$n <- n * 2
+```
+
+We now create a jags model object containing the data and the model along with some details about how many chains will be run to simulate from the posterior distribution, and how many iterations will be used for the model to learn (adapt) how best to sample from the MCMC process (which we dont really have to worry too much about if our models are converging at the end of this process). We then use `coda.samples` to generate our posterior estimates. We define which variables we want to monitor (generate estimates for) and also determine the length of the simluation run for each chain, and how often we want to sample from the chain (I have selected `thin = 10` to avoid autocorrelation in the samples). We also run a quick test on the convergence of the simulation (though I am not going to dwell too much on this aspect here and will do so in a dedicated file another time).
+
+```{r jags_sample}
+# assign the data to the jags model object
+model <- jags.model(textConnection(model_string), 
+                   data = mydata, 
+                   n.chain = 2, 
+                   n.adapt = 1000)
+
+# fit the model
+bayes.glm <- coda.samples(model = model, 
+                              variable.names = c("b0",
+                                                 "b1",
+                                                 "v"), 
+                              n.iter = 1 * 10^4, 
+                              thin = 5)
+
+
+```
+
+
+## Assess model outputs
+It only remains to check that the model converged, and to explore the estimated parameters, which in this case we can do in light of our simulated data.
+
+```{r assess}
+
+# The gelman diagnostic is used to assess whether our chains have 
+# converged on a single solution
+# these numbers should all be close to 1 (which they are... very close)
+gelman.diag(bayes.glm)
+
+# and a summary of the estimated parameters
+summary(bayes.glm)
+
+# convert posterior estimats to a matrix for easier extraction and plotting
+pars.matrix <- as.matrix(bayes.glm)
+
+# extract the means of the posterior for plotting
+pars.means <- apply(pars.matrix, 2, mean)
+
+# plot the data again in this chunk
+plot(Y ~ X, col = G, bty = "L")
+
+# add lines based on the esimates to the plot
+abline(a = pars.means[1], b = pars.means[3], col = 1)
+abline(a = pars.means[2], b = pars.means[4], col = 2)
+```
+
+
+
+

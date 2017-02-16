@@ -23,11 +23,12 @@ First I simulate some data, in this case a set of 4 linear relationships of Y on
 set.seed(1)
 
 # sample size per group
-n <- 20
+n <- 10
 
 # number of groups
-g <- 5
+g <- 26
 G <- factor(rep(LETTERS[1:g], n))
+#G <- factor(rep(1:g), n)
 
 # set the colour palette accordingly (NB i use the library viridis)
 palette(viridis(g))
@@ -82,7 +83,8 @@ library(lme4, quietly = TRUE)
 
 
 # fixed effects only. 4 slopes and 4 intercepts using glm()
-m1 <- glm(Y ~ X * G)
+# NB this is the same as writing the short-hand glm(Y ~ X * G)
+m1 <- glm(Y ~ X + G + X:G)
 
 # one slope and random intercept
 m2 <- lmer(Y ~ X + (1|G))
@@ -90,7 +92,7 @@ m2 <- lmer(Y ~ X + (1|G))
 # 4 slopes and a random intercept term
 m3 <- lmer(Y ~ X + X:G + (1|G))
 
-# random slope and random intercept
+# random slope and random intercept (correlated)
 m4 <- lmer(Y ~ X + (X|G))
 
 # random slope and random intercept (uncorrelated)
@@ -179,7 +181,7 @@ sim.vars <- c(Var.intercepts = s.c ^ 2,
 # Model selection
 Finally we might like to use AIC to select among our models, however I think that calculation of AIC is not appropriate for among models whose random parts are different and instead we should use likelihood only. But i dont know, and somewhat annoyingly, the best model is m1 which is the full factorial fixed effects model. 
 
-***UPDATE:*** After some research (googling) it turns out that comparisons between lmer and glm (or lm) fitted models using AIC is not possible owing to the different way in which likelihood is computed. ***Do not*** is the [simple advice](http://glmm.wikidot.com/faq). There are also [cautionary instrucitons](http://www.ssicentral.com/hlm/help6/faq/Full_ML_vs_Restricted_ML.pdf) when comparing `lmer` models whose fixed effects differ, with the advice being to set `REML = FALSE`.
+***UPDATE:*** After some research (googling) it turns out that comparisons between lmer and glm (or lm) fitted models using AIC is not possible owing to the different way in which likelihood is computed. ***Do not*** is the [simple advice](http://glmm.wikidot.com/faq). There are also [cautionary instrucitons](http://www.ssicentral.com/hlm/help6/faq/Full_ML_vs_Restricted_ML.pdf) when comparing `lmer` models whose fixed effects differ, with the advice being to set `REML = FALSE`. The [Durbin-Wu-Hausman test](https://en.wikipedia.org/wiki/Durbin–Wu–Hausman_test) is suggested as a way to resolve this, but I am just noting this here for now, and have not looked in detail at it.
 
 ```{r aic}
 lapply(list(m1, m2, m3, m4, m5), extractAIC, REML = T)

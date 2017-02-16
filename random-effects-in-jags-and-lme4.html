@@ -11,7 +11,7 @@
 
 <meta name="author" content="Andrew L Jackson" />
 
-<meta name="date" content="2016-09-14" />
+<meta name="date" content="2016-09-21" />
 
 <title>Random Effects in Jags and lme4</title>
 
@@ -118,12 +118,15 @@ $(document).ready(function () {
 
 <h1 class="title toc-ignore">Random Effects in Jags and lme4</h1>
 <h4 class="author"><em>Andrew L Jackson</em></h4>
-<h4 class="date"><em>2016-09-14</em></h4>
+<h4 class="date"><em>2016-09-21</em></h4>
 
 </div>
 
 
 <p>In this example, we are going to fit (nested) random effects models using both Maximmum Likelihood methods using the package <code>lme4</code> and Bayesian methods using the package <code>rjags</code>. The data we will use is the <code>Pastes</code> data included with <code>lme4</code> which is the “Strength of a chemical paste product; its quality depending on the delivery batch, and the cask within the delivery” (see <code>?lme4::Pastes</code> for more details). These random effects models are often synonymously called “mixed effects” or “multi-level” models.</p>
+<p>Mathematically they take the form</p>
+<p><span class="math display">\[y_{ijk} = \beta_0 + U_{ij} + V_{ijk} + \epsilon_{i}\]</span></p>
+<p>where <span class="math inline">\(\beta_0\)</span> is the intercept, or overall grand mean in this case; <span class="math inline">\(U_{ij}\)</span> is the random deviation from the intercept for the <em>i</em>th individual in the <em>j</em>th level 1 grouping; <span class="math inline">\(V_{ijk}\)</span> is the random deviation from the intercept for the <em>k</em>th level 2 grouping (which is added to the <em>i</em>th individual within the <em>j</em>th group); and <span class="math inline">\(\epsilon_i\)</span> is the residual error or level 0 error deviation. All of <span class="math inline">\(U\)</span>, <span class="math inline">\(V\)</span> and <span class="math inline">\(\epsilon\)</span> are assumed to come from a normal distribution with mean 0 and a variance to be estimated from the data.</p>
 <pre class="r"><code># clear the current environment of objects
 rm(list=ls())
 
@@ -139,7 +142,10 @@ library(rjags, quietly = TRUE)</code></pre>
 <pre class="r"><code># This code requires the hdrcde package which you may need to install.
 library(hdrcde, quietly = TRUE)</code></pre>
 <pre><code>## hdrcde 3.1 loaded</code></pre>
-<pre class="r"><code># I always load the viridis package to create colour palettes,
+<pre class="r"><code># this code requires the MCMCglmm package
+library(MCMCglmm, quietly = TRUE)
+
+# I always load the viridis package to create colour palettes,
 # but you could skip this and use a different palette if you like.
 library(viridis, quietly = TRUE)
 
@@ -207,7 +213,7 @@ m.nested &lt;- lmer(strength ~ 1 + (1|batch/cask), data = Pastes)</code></pre>
   
   } # end of model
 '</code></pre>
-<p>The data now need to be collected in a list, with element names corresponding to the jags code above.</p>
+<p>The data now need to be collected in a list, with element names corresponding to the jags code above. To fit with the generic labelling used in the jags model above, we relabel the data in <code>Pastes</code> when we create the list object <code>mydata</code>.</p>
 <pre class="r"><code>mydata &lt;- list()
 
 # the response variable y
@@ -245,7 +251,7 @@ bayes.nested = coda.samples(model = model,
                                                  &quot;v_level0&quot;,
                                                  &quot;v_level1&quot;,
                                                  &quot;v_level2&quot;), 
-                              n.iter = 5 * 10^4, 
+                              n.iter = 3 * 10^4, 
                               thin = 10)
 
 # these numbers should all be close to 1 (which they are... very close)
@@ -253,18 +259,34 @@ gelman.diag(bayes.nested)</code></pre>
 <pre><code>## Potential scale reduction factors:
 ## 
 ##          Point est. Upper C.I.
-## b0                1       1.00
-## v_level0          1       1.00
-## v_level1          1       1.00
-## v_level2          1       1.01
+## b0             1.01       1.01
+## v_level0       1.00       1.00
+## v_level1       1.00       1.00
+## v_level2       1.02       1.02
 ## 
 ## Multivariate psrf
 ## 
 ## 1</code></pre>
 </div>
+<div id="mcmcglmm" class="section level2">
+<h2>MCMCglmm</h2>
+<p>The <code>MCMCglmm</code> package provides a similar interface to <code>lme4</code> but fitting is in the Bayesian framework using mcmc and has the additional advantage of being able to handle phylogenetic correlation (which we won’t cover here). Here we run the mcmc sampler with the same iterations, burnin and thinning as we did in the jags model. We use a non-informative prior as recommended in the . Note that the priors for the random effects terms in <code>MCMCglmm</code> are the <a href="https://en.wikipedia.org/wiki/Inverse-Wishart_distribution">inverse-Wishart distribution</a>, which as these are univariates, simplifies to the <a href="https://en.wikipedia.org/wiki/Inverse-gamma_distribution">inverse-gamma distribution</a>, but take care in the parameterisation if comparing with the <code>jags</code> priors above (I haven’t done the maths to check, but just leave this hanging here as a cautionary note and as an explanation for why the estimates are slightly different between the two models).</p>
+<pre class="r"><code>prior &lt;- list(G = list(G1 = list(V = 1/4, nu=0.002),
+                       G2 = list(V = 1/4, nu=0.002)))
+
+# verbose = FALSE prevents updating information to be printed to screen 
+# for this vignette.               
+glmm.nested &lt;- MCMCglmm(strength ~ 1, random = ~ batch + sample, 
+                        data = Pastes,
+                        nitt = 3 * 10^4,
+                        thin = 10,
+                        burnin = 10000,
+                        prior = prior,
+                        verbose = FALSE)</code></pre>
+</div>
 <div id="compare-model-outputs" class="section level2">
 <h2>Compare model outputs</h2>
-<p>It only remains to compare the results from the ML and Bayesian model fits. This can be done by inspecting the <code>summary()</code> output of each, although the additional information on the various quantiles produced for the bayesian model is a little unhelpful for a quick comparison. I create some basic vectors of the most pertinent information (central tendency) as well. In this case, <code>b_0</code> corresponds to the intercept, <code>v_level0</code> to the residual variance, <code>v_level1</code>$ to the variance associated with cask:batch, and <code>v_level2</code> to the variance associated with batch in the ML model <code>m.nested</code>. With the posterior distribution of <code>v_level2</code>, the batch level variance, being pushed up against 0 and being heavily skewed, the mode, mean and median are all very different. In many ways, this might suggest that this random effect is not required since it is practically zero, but in any case, the median provides a more consistent estimate with the ML approach using <code>lmer</code>.</p>
+<p>It only remains to compare the results from the ML and Bayesian model fits. Here I focus on the Bayesian fit via jags, but we could also spend some time looking at the <code>MCMCglmm</code> fit in the same manner. Comparison can be done by inspecting the <code>summary()</code> output of each, although the additional information on the various quantiles produced for the bayesian model is a little unhelpful for a quick comparison. I create some basic vectors of the most pertinent information (central tendency) as well. In this case, <code>b_0</code> corresponds to the intercept, <code>v_level0</code> to the residual variance, <code>v_level1</code> to the variance associated with cask:batch, and <code>v_level2</code> to the variance associated with batch in the ML model <code>m.nested</code>. With the posterior distribution of <code>v_level2</code>, the batch level variance, being pushed up against 0 and being heavily skewed, the mode, mean and median are all very different. In many ways, this might suggest that this random effect is not required since it is practically zero, but in any case, the median provides a more consistent estimate with the ML approach using <code>lmer</code>.</p>
 <pre class="r"><code>summary(m.nested)</code></pre>
 <pre><code>## Linear mixed model fit by REML ['lmerMod']
 ## Formula: strength ~ 1 + (1 | batch/cask)
@@ -288,28 +310,57 @@ gelman.diag(bayes.nested)</code></pre>
 ## (Intercept)  60.0533     0.6769   88.72</code></pre>
 <pre class="r"><code>summary(bayes.nested)</code></pre>
 <pre><code>## 
-## Iterations = 10010:60000
+## Iterations = 10010:40000
 ## Thinning interval = 10 
 ## Number of chains = 2 
-## Sample size per chain = 5000 
+## Sample size per chain = 3000 
 ## 
 ## 1. Empirical mean and standard deviation for each variable,
 ##    plus standard error of the mean:
 ## 
 ##             Mean     SD Naive SE Time-series SE
-## b0       59.9894 0.8090 0.008090       0.024884
-## v_level0  0.7542 0.2152 0.002152       0.002205
-## v_level1  9.8105 3.3107 0.033107       0.044117
-## v_level2  2.9597 4.2290 0.042290       0.117375
+## b0       60.0087 0.8066 0.010413       0.032349
+## v_level0  0.7543 0.2158 0.002786       0.002831
+## v_level1  9.7432 3.1549 0.040730       0.058212
+## v_level2  3.0805 4.4797 0.057833       0.148055
 ## 
 ## 2. Quantiles for each variable:
 ## 
-##               2.5%     25%    50%     75%  97.5%
-## b0       58.291914 59.4904 59.995 60.4988 61.576
-## v_level0  0.445571  0.6020  0.716  0.8649  1.276
-## v_level1  5.170482  7.4858  9.233 11.4548 17.927
-## v_level2  0.007623  0.4755  1.696  3.7955 13.877</code></pre>
-<pre class="r"><code># convert the MCMC output to a matrix
+##               2.5%     25%     50%     75%  97.5%
+## b0       58.360236 59.5258 60.0171 60.4912 61.565
+## v_level0  0.443424  0.6009  0.7152  0.8698  1.286
+## v_level1  5.092858  7.5000  9.2514 11.4743 17.225
+## v_level2  0.008785  0.5638  1.8070  3.9969 13.493</code></pre>
+<pre class="r"><code>summary(glmm.nested)</code></pre>
+<pre><code>## 
+##  Iterations = 10001:29991
+##  Thinning interval  = 10
+##  Sample size  = 2000 
+## 
+##  DIC: 177.8537 
+## 
+##  G-structure:  ~batch
+## 
+##       post.mean  l-95% CI u-95% CI eff.samp
+## batch    0.9702 6.251e-05    4.951    556.2
+## 
+##                ~sample
+## 
+##        post.mean l-95% CI u-95% CI eff.samp
+## sample     10.15     5.04    16.66     2000
+## 
+##  R-structure:  ~units
+## 
+##       post.mean l-95% CI u-95% CI eff.samp
+## units    0.7204   0.4047     1.09     2000
+## 
+##  Location effects: strength ~ 1 
+## 
+##             post.mean l-95% CI u-95% CI eff.samp  pMCMC    
+## (Intercept)     60.04    58.78    61.40     2000 &lt;5e-04 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</code></pre>
+<pre class="r"><code># convert the jags created MCMC output to a matrix
 bayes.mat &lt;- as.matrix(bayes.nested)
 
 # get the modes of each posterior parameter via hdrcd::hdr
@@ -325,12 +376,12 @@ bayes.mean &lt;- apply(bayes.mat, 2, mean)
 # collate and round them for printing to screen
 print(round(rbind(bayes.modes, bayes.median, bayes.mean),2))</code></pre>
 <pre><code>##                 b0 v_level0 v_level1 v_level2
-## bayes.modes  60.03     0.66     8.10     0.08
-## bayes.median 60.00     0.72     9.23     1.70
-## bayes.mean   59.99     0.75     9.81     2.96</code></pre>
+## bayes.modes  60.03     0.65     8.61     0.08
+## bayes.median 60.02     0.72     9.25     1.81
+## bayes.mean   60.01     0.75     9.74     3.08</code></pre>
 <pre class="r"><code># print just the variances for the lmer fit
 vc &lt;- VarCorr(m.nested)
-print(vc,comp=c(&quot;Variance&quot;), digits = 2)</code></pre>
+print(vc, comp = c(&quot;Variance&quot;), digits = 2)</code></pre>
 <pre><code>##  Groups     Name        Variance
 ##  cask:batch (Intercept) 8.43    
 ##  batch      (Intercept) 1.66    
